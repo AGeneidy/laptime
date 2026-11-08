@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="386" viewBox="0 0 1200 386" role="img" aria-label="laptime overview">
+<title>laptime overview</title>
+<defs><marker id="a-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#D39A3C"/></marker><marker id="a-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5470B5"/></marker><marker id="a-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6E9A57"/></marker></defs>
+<rect x="1" y="1" width="1198" height="384" rx="16" fill="#FBFBF9" stroke="#E3E5E8" stroke-width="1.2"/>
+<text x="600.0" y="46" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="24" font-weight="700" fill="#1F2328">laptime</text>
+<text x="600.0" y="72" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" fill="#5B636E">Each Stream reads one feed and passes every trade through four stages.</text>
+<rect x="182" y="104" width="836" height="228" rx="14" fill="#F1F5FD" stroke="#C3D1EE" stroke-width="1.2"/>
+<text x="200" y="130" text-anchor="start" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace" font-size="14" font-weight="700" fill="#2C4A8C">FeedHandler</text>
+<text x="1000" y="130" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="12.5" fill="#5B636E">owns every Stream · starts and stops them</text>
+<rect x="210" y="160" width="794" height="156" rx="12" fill="#FFFFFF" stroke="#C3D1EE" stroke-width="1.2"/>
+<rect x="203" y="153" width="794" height="156" rx="12" fill="#FFFFFF" stroke="#C3D1EE" stroke-width="1.2"/>
+<rect x="196" y="146" width="794" height="156" rx="12" fill="#FFFFFF" stroke="#8EA6D6" stroke-width="1.2"/>
+<text x="212" y="172" text-anchor="start" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace" font-size="14" font-weight="700" fill="#2C4A8C">Stream</text>
+<text x="278" y="172" text-anchor="start" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace" font-size="12.5" fill="#5B636E">&quot;binance-btcusdt&quot;</text>
+<text x="974" y="172" text-anchor="end" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#2C4A8C">× N · one per StreamConfig</text>
+<rect x="212.0" y="186" width="147.0" height="100" rx="10" fill="#F8FAFF" stroke="#8EA6D6" stroke-width="1.2"/>
+<circle cx="232.0" cy="207" r="11" fill="#5470B5"/>
+<text x="232.0" y="211.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#FFFFFF">1</text>
+<text x="293.5" y="213" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace" font-size="16" font-weight="700" fill="#2C4A8C">Source</text>
+<text x="285.5" y="238" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="12.5" fill="#5B636E">reads raw messages</text>
+<line x1="226.0" y1="252" x2="345.0" y2="252" stroke="#C3D1EE"/>
+<text x="285.5" y="272" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="12.5" fill="#5B636E"><tspan fill="#1F2328" font-weight="700">WebSocket</tspan><tspan fill="#8A929D"> · file</tspan><tspan fill="#8A929D"> · …</tspan></text>
+<path d="M361.0,236.0 L414.0,236.0" fill="none" stroke="#5470B5" stroke-width="1.8" marker-end="url(#a-blue)"/>
+<text x="388.0" y="227.0" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="11" font-weight="600" fill="#2C4A8C">message</text>
+<rect x="417.0" y="186" width="147.0" height="100" rx="10" fill="#F8FAFF" stroke="#8EA6D6" stroke-width="1.2"/>
+<circle cx="437.0" cy="207" r="11" fill="#5470B5"/>
+<text x="437.0" y="211.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#FFFFFF">2</text>
+<text x="498.5" y="213" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace" font-size="16" font-weight="700" fill="#2C4A8C">Adaptor</text>
+<text x="490.5" y="238" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="12.5" fill="#5B636E">parses into a Trade</text>
+<line x1="431.0" y1="252" x2="550.0" y2="252" stroke="#C3D1EE"/>
+<text x="490.5" y="272" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="12.5" fill="#5B636E"><tspan fill="#1F2328" font-weight="700">Binance</tspan><tspan fill="#8A929D"> · Coinbase</tspan><tspan fill="#8A929D"> · …</tspan></text>
+<path d="M566.0,236.0 L619.0,236.0" fill="none" stroke="#5470B5" stroke-width="1.8" marker-end="url(#a-blue)"/>
+<text x="593.0" y="227.0" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="11" font-weight="600" fill="#2C4A8C">Trade</text>
+<rect x="622.0" y="186" width="147.0" height="100" rx="10" fill="#F8FAFF" stroke="#8EA6D6" stroke-width="1.2"/>
+<circle cx="642.0" cy="207" r="11" fill="#5470B5"/>
+<text x="642.0" y="211.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#FFFFFF">3</text>
+<text x="703.5" y="213" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace" font-size="16" font-weight="700" fill="#2C4A8C">Encoder</text>
+<text x="695.5" y="238" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="12.5" fill="#5B636E">encodes the Trade</text>
+<line x1="636.0" y1="252" x2="755.0" y2="252" stroke="#C3D1EE"/>
+<text x="695.5" y="272" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="12.5" fill="#5B636E"><tspan fill="#1F2328" font-weight="700">JSON</tspan><tspan fill="#8A929D"> · Protobuf</tspan><tspan fill="#8A929D"> · …</tspan></text>
+<path d="M771.0,236.0 L824.0,236.0" fill="none" stroke="#5470B5" stroke-width="1.8" marker-end="url(#a-blue)"/>
+<text x="798.0" y="227.0" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="11" font-weight="600" fill="#2C4A8C">bytes</text>
+<rect x="827.0" y="186" width="147.0" height="100" rx="10" fill="#F8FAFF" stroke="#8EA6D6" stroke-width="1.2"/>
+<circle cx="847.0" cy="207" r="11" fill="#5470B5"/>
+<text x="847.0" y="211.5" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#FFFFFF">4</text>
+<text x="908.5" y="213" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace" font-size="16" font-weight="700" fill="#2C4A8C">Sink</text>
+<text x="900.5" y="238" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="12.5" fill="#5B636E">publishes the bytes</text>
+<line x1="841.0" y1="252" x2="960.0" y2="252" stroke="#C3D1EE"/>
+<text x="900.5" y="272" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="12.5" fill="#5B636E"><tspan fill="#1F2328" font-weight="700">Kafka</tspan><tspan fill="#8A929D"> · file</tspan><tspan fill="#8A929D"> · …</tspan></text>
+<rect x="24" y="201.0" width="128" height="70" rx="12" fill="#FFFBF2" stroke="#E2B062" stroke-width="1.2"/>
+<text x="88.0" y="232.0" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#8A520F">Binance</text>
+<text x="88.0" y="252.0" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#5B636E">btcusdt trades</text>
+<path d="M152,236.0 L209,236.0" fill="none" stroke="#D39A3C" stroke-width="1.8" marker-end="url(#a-amber)"/>
+<rect x="1048" y="201.0" width="128" height="70" rx="12" fill="#FAFCF8" stroke="#9BB88A" stroke-width="1.2"/>
+<text x="1112.0" y="232.0" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#3B5C2A">Kafka</text>
+<text x="1112.0" y="252.0" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="12" fill="#5B636E">topic trades</text>
+<path d="M976.0,236.0 L1045,236.0" fill="none" stroke="#6E9A57" stroke-width="1.8" marker-end="url(#a-green)"/>
+<text x="600.0" y="362" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="12.5" fill="#5B636E"><tspan fill="#1F2328" font-weight="700">Bold</tspan> = built today.   <tspan fill="#8A929D">Grey</tspan> = could replace it: every stage is an interface, so any stage can be swapped.</text>
+</svg>

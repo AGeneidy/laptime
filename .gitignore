@@ -1,0 +1,7 @@
+# Build output
+build/
+cmake-build-*/
+
+# IDE and OS
+.idea/
+.DS_Store
