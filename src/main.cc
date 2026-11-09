@@ -1,4 +1,5 @@
 #include <chrono>
+#include <iostream>
 #include <thread>
 
 #include "common/stop_signal.h"
@@ -25,6 +26,8 @@ int Run() {
   while (!StopRequested()) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
+  feed.Stop();  // joins the WebSocket thread, so the samples are final
+  feed.ReportLatency(std::cout);
   return 0;
 }
 

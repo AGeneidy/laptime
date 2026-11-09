@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <iterator>
 #include <memory>
+#include <ostream>
 #include <vector>
 
 #include "feed/stream.h"
@@ -22,15 +23,22 @@ class FeedHandler {
   }
 
   void Start() {
-    std::ranges::for_each(streams_, [](auto& stream) { stream->Start(); });
+    std::ranges::for_each(streams_, &Stream::Start);
   }
 
   void Stop() {
-    std::ranges::for_each(streams_, [](auto& stream) { stream->Stop(); });
+    std::ranges::for_each(streams_, &Stream::Stop);
   }
 
   FeedHandler(const FeedHandler&) = delete;
   FeedHandler& operator=(const FeedHandler&) = delete;
+
+  void ReportLatency(std::ostream& out) const {
+    for (const auto& stream : streams_) {
+      out << '\n' << "latency for stream " << stream->name() << ":\n"
+          << stream->SummarizeLatency();
+    }
+  }
 
   ~FeedHandler() { Stop(); }
 

@@ -65,8 +65,15 @@ docker exec -it kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-serve
     --topic trades --formatter-property print.key=true
 ```
 
-The program prints `Connection established` when the WebSocket opens. On exit it prints
+The program prints `Connection established` when the WebSocket opens. On exit it prints a
+latency table per stream (min, p50, p90, p95, p99, max in nanoseconds), then
 `% Kafka delivery stats: <n> delivered, <m> failed`.
+
+Each latency sample is the time one WebSocket message spends inside laptime: from the moment
+IXWebSocket hands it over, through parsing, encoding and the Kafka produce call, until the call
+returns. It does not include the network, the exchange, the WebSocket layer (TLS decryption and
+frame decoding), or Kafka delivery. Messages that contain no trades are not counted. The first
+10'000 samples are kept, and the table says how many arrived after that.
 
 In **CLion**, open the folder and run the `laptime` target. The red Stop button sends SIGINT, which
 triggers the same clean shutdown as Ctrl+C.

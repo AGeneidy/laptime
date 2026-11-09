@@ -4,6 +4,10 @@
 
 #include "feed/stream.h"
 
+#include <vector>
+
+#include "common/clock.h"
+
 namespace laptime {
 
 void Stream::Start() {
@@ -18,12 +22,22 @@ void Stream::Stop() {
   sink_->Flush();
 }
 
-Stream::~Stream() { Stop(); }
+LatencySummary Stream::SummarizeLatency() const {
+  return recorder_.GetSummary();
+}
 
-void Stream::OnMessage(const std::string_view str) const {
-  for (const Trade& trade : adaptor_->Parse(str)) {
+Stream::~Stream() {
+  Stop();
+}
+
+void Stream::OnMessage(const std::string_view str) {
+  const int64_t start = SteadyNanos();
+  const std::vector<Trade> trades = adaptor_->Parse(str);
+  for (const Trade& trade : trades) {
     sink_->Publish(trade.symbol, encoder_(trade));
   }
+  // Messages with no trades (other events, bad JSON) would skew the numbers.
+  if (!trades.empty()) recorder_.RecordSample(SteadyNanos() - start);
 }
 
 }  // namespace laptime

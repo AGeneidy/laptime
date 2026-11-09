@@ -5,9 +5,12 @@
 #ifndef LAPTIME_FEED_STREAM_H_
 #define LAPTIME_FEED_STREAM_H_
 #include <memory>
+#include <string>
+#include <string_view>
 
 #include "adaptors/adaptor.h"
 #include "adaptors/adaptor_factory.h"
+#include "common/latency_recorder.h"
 #include "encoders/encoder.h"
 #include "encoders/encoder_factory.h"
 #include "model/config/stream_config.h"
@@ -20,7 +23,7 @@ namespace laptime {
 
 class Stream final {
  public:
-  explicit Stream(const StreamConfig& config) {
+  explicit Stream(const StreamConfig& config) : name_(config.name) {
     sink_ = CreateSink(config.sink);
     encoder_ = CreateEncoder(config.encoder);
     adaptor_ = CreateAdaptor(config.adaptor);
@@ -33,10 +36,15 @@ class Stream final {
   void Start();
   void Stop();
 
+  LatencySummary SummarizeLatency() const;
+  std::string_view name() const { return name_; }
+
  private:
-  void OnMessage(std::string_view) const;
+  void OnMessage(std::string_view);
   bool stopped_ = false;
+  std::string name_;
   Encoder encoder_;
+  LatencyRecorder recorder_{};
   std::unique_ptr<Adaptor> adaptor_;
   std::unique_ptr<Sink> sink_;
   std::unique_ptr<Source> source_;

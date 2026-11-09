@@ -10,6 +10,7 @@ How laptime works inside. For the big picture, start with the [README](../README
 6. [Threads: who runs what](#6-threads-who-runs-what)
 7. [Clean shutdown](#7-clean-shutdown)
 8. [What happens when something goes wrong](#8-what-happens-when-something-goes-wrong)
+9. [Measuring latency](#9-measuring-latency)
 
 ## 1. A Stream is four stages
 
@@ -27,10 +28,14 @@ Swapping one stage never touches the other three.
 The stages are joined by `Stream::OnMessage`, which is the whole per-message path:
 
 ```cpp
-void Stream::OnMessage(const std::string_view str) const {
-  for (const Trade& trade : adaptor_->Parse(str)) {
+void Stream::OnMessage(const std::string_view str) {
+  const int64_t start = SteadyNanos();
+  const std::vector<Trade> trades = adaptor_->Parse(str);
+  for (const Trade& trade : trades) {
     sink_->Publish(trade.symbol, encoder_(trade));
   }
+  // Messages with no trades (other events, bad JSON) would skew the numbers.
+  if (!trades.empty()) recorder_.RecordSample(SteadyNanos() - start);
 }
 ```
 
@@ -38,6 +43,10 @@ void Stream::OnMessage(const std::string_view str) const {
   frame. An empty vector means "nothing to publish" (for example, a frame that isn't JSON).
 - The **Encoder is a plain function pointer**, not a class. It has no settings and no state, so
   there is no object to create or own, and calling it is an ordinary function call.
+- **Each message is timed.** The two `SteadyNanos()` calls bracket the whole path, and the result
+  goes into the stream's `LatencyRecorder`. Writing that sample is why `OnMessage` isn't `const`.
+  The trades are kept in a named vector so the code can check afterwards whether there were any.
+  See [§9](#9-measuring-latency).
 
 ## 2. One normalized `Trade`
 
@@ -127,11 +136,12 @@ Factories hand back ownership: `CreateSource`, `CreateAdaptor` and `CreateSink` 
   `this` (the `Stream`), so a `Stream` must never move. On the heap its address stays fixed, even
   when the vector grows.
 - **Declaration order is destruction order.** Members are destroyed bottom-up, so the source,
-  which is declared last, is destroyed first. Its thread is gone before the adaptor and sink it
-  calls are destroyed:
+  which is declared last, is destroyed first. Its thread is gone before the recorder, adaptor and
+  sink it uses are destroyed:
 
   ```cpp
   Encoder encoder_;
+  LatencyRecorder recorder_;
   std::unique_ptr<Adaptor> adaptor_;
   std::unique_ptr<Sink> sink_;
   std::unique_ptr<Source> source_;  // declared last → destroyed first
@@ -144,13 +154,17 @@ Factories hand back ownership: `CreateSource`, `CreateAdaptor` and `CreateSink` 
 
 | Thread | Started by | What it runs |
 |---|---|---|
-| **main** | the OS | Builds everything, sleeps in 100 ms steps, then runs the whole shutdown |
+| **main** | the OS | Builds everything, sleeps in 100 ms steps, then runs the whole shutdown and prints the latency report |
 | **IXWebSocket's thread** (one per stream) | `ix::WebSocket::start()` | Connecting and reconnecting, reading frames, and **our whole per-message path**: `OnMessage` → `Parse` → `ToJson` → `Publish` |
 | **librdkafka's threads** | `RdKafka::Producer::create()` | Batching, sending to the broker, retries |
 
 - **No locks in our code.** Each stream's per-message work runs on that stream's own socket
-  thread, and streams share nothing. The only cross-thread values are the stop flag (an atomic) and
-  librdkafka's internal queue (librdkafka does its own locking).
+  thread, and streams share nothing. The only cross-thread values are the stop flag (an atomic),
+  librdkafka's internal queue (librdkafka does its own locking), and the latency samples (next
+  point).
+- **Latency samples cross threads once.** The socket thread writes them in `OnMessage`. The main
+  thread reads them only after `Stop()` has joined that thread, so the join is all the
+  synchronization needed. Reading them while the stream runs would be a data race.
 - **`Publish` is an enqueue, not a network send.** `produce()` copies the bytes (`RK_MSG_COPY`) into
   librdkafka's queue and returns. The `std::string` from the encoder can be destroyed right away.
 - **Key = symbol.** With `PARTITION_UA`, librdkafka picks the partition by hashing the key, so all
@@ -165,12 +179,19 @@ Factories hand back ownership: `CreateSource`, `CreateAdaptor` and `CreateSink` 
 **The signal handler only sets a flag.** A signal can interrupt the program in the middle of
 anything, including a `malloc`. Inside a handler, only lock-free atomics are safe. So the
 handler stores `true` into a `std::atomic<bool>` (`static_assert`-ed to be lock-free) and
-nothing more. The main thread notices within 100 ms and returns from `Run()`. The handler also
+nothing more. The main thread notices within 100 ms and leaves its loop. The handler also
 resets the signal to its default, so a **second Ctrl+C kills the process at once**, in case a
 shutdown hangs.
 
-**The order is built into the code.** Leaving `Run()` destroys `feed`, and `~FeedHandler()` calls
-`Stop()` on every stream:
+**The order is written out in `Run()`.** After the loop, `Run()` stops the feed, and only then
+prints the latency report:
+
+```cpp
+feed.Stop();  // joins the WebSocket thread, so the samples are final
+feed.ReportLatency(std::cout);
+```
+
+`FeedHandler::Stop()` calls `Stop()` on every stream:
 
 ```cpp
 void Stream::Stop() {
@@ -182,9 +203,10 @@ void Stream::Stop() {
 ```
 
 Stopping the source first means that once the flush starts, nothing new can be published.
-`Stop()` is **idempotent**, meaning a second call does nothing, because both `~FeedHandler` and
-`~Stream` call it. After that, the members are destroyed (source first), and `~KafkaSink` prints
-the delivery stats.
+`Stop()` is **idempotent**, meaning a second call does nothing, because `Run()`, `~FeedHandler` and
+`~Stream` all call it. The report is printed from `Run()`, not from a destructor, so the whole
+shutdown reads top to bottom in one place. When `Run()` returns, the members are destroyed (source
+first), and `~KafkaSink` prints the delivery stats.
 
 ## 8. What happens when something goes wrong
 
@@ -196,3 +218,34 @@ the delivery stats.
 | librdkafka's queue is full | `Publish` waits (`poll(1000)`) and retries. This blocks the socket thread (back-pressure) |
 | Kafka rejects a message | Printed when it happens, counted, and totalled at exit |
 | A Kafka setting is invalid | The `KafkaSink` constructor throws at startup and the program stops before anything runs |
+
+## 9. Measuring latency
+
+![What the latency numbers cover: where each step of a trade runs, which stretch laptime times, and which stretches could be timed or are out of reach](images/latency-coverage.svg)
+
+Each stream times its own per-message path. After shutdown, `Run()` prints one table per stream:
+min, p50, p90, p95, p99 and max, in nanoseconds.
+
+- **What one sample covers.** `OnMessage` reads `SteadyNanos()` (a wrapper around
+  `std::chrono::steady_clock`, which never jumps) when IXWebSocket calls it (`t0`), and again after
+  the last `Publish` returns (`t1`). That is parsing, encoding and the Kafka enqueue. It includes
+  `Publish`'s `poll(0)`, which can run delivery reports for earlier messages, and any wait on a full
+  librdkafka queue. Messages that carry no trades aren't timed.
+- **Recording never allocates.** `LatencyRecorder` allocates its whole vector in the constructor
+  (10'000 samples by default). `RecordSample` only writes the next slot, and it is defined in the
+  header so it can be inlined into `OnMessage`. Once the vector is full, further samples are
+  counted, and the report says how many weren't recorded.
+- **Nearest-rank percentiles.** For p%, `GetSummary()` sorts a copy and takes the sample at index
+  `(p * n - 1) / 100`: the smallest sample with at least p% of all samples at or below it. Every
+  percentile is a value that was actually measured. With fewer than 100 samples, p99 is the max.
+- **`T` and `E` are context, not a measurement.** Binance stamps `T` when it matches the trade and
+  `E` when it sends it. Both are parsed into each `Trade`, but nothing is timed from them.
+
+What isn't timed, and what it would take (the bottom rows of the diagram):
+
+| Stretch | Status | Why |
+|---|---|---|
+| IXWebSocket: read + TLS, then decode | Could add | A small patch to IXWebSocket: one `steady_clock` reading after `poll()` returns and one after the read loop, on the same clock and thread as `t0`. Messages that arrive in the same read share both readings. |
+| Kafka delivery | Could add | librdkafka keeps it for every message: `Message::latency()`, read in `dr_cb`, runs from `produce()` until `dr_cb` runs inside a later `poll()`, not until the broker's ack. |
+| Network | Out of reach | It compares Binance's `E` with our clock, and the two can be milliseconds apart. |
+| Kernel wake-up | Out of reach on macOS | macOS only timestamps received datagrams (`SO_TIMESTAMP`), not TCP. Linux has `SO_TIMESTAMPING` for TCP, read with `recvmsg()`, but OpenSSL's socket reads don't use `recvmsg()`, so it would need a custom socket BIO. |
