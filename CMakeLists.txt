@@ -12,10 +12,17 @@ endif()
 # --- IXWebSocket ---
 set(USE_TLS ON CACHE BOOL "" FORCE)
 set(USE_OPEN_SSL ON CACHE BOOL "" FORCE)
+set(IXWEBSOCKET_PATCH ${CMAKE_CURRENT_SOURCE_DIR}/third_party/ixwebsocket/receive-times.patch)
+file(SHA256 ${IXWEBSOCKET_PATCH} IXWEBSOCKET_PATCH_SHA256)
 FetchContent_Declare(ixwebsocket
         GIT_REPOSITORY https://github.com/machinezone/IXWebSocket.git
-        GIT_TAG        v12.0.1
-        GIT_SHALLOW    TRUE)
+        GIT_TAG        64fae7676bd8fe31f7cb4bcde7a6841892dad65e  # v12.0.1
+        GIT_SHALLOW    TRUE
+        # Reset first, so a re-run never applies the patch on top of itself.
+        PATCH_COMMAND  git reset --hard --quiet
+        COMMAND  git apply ${IXWEBSOCKET_PATCH}
+        # The hash is part of the declaration, so editing the patch re-applies it.
+        COMMAND  ${CMAKE_COMMAND} -E echo "IXWebSocket patch ${IXWEBSOCKET_PATCH_SHA256}")
 
 # --- librdkafka ---
 set(RDKAFKA_BUILD_STATIC   ON  CACHE BOOL "" FORCE)

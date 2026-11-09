@@ -1,0 +1,106 @@
+diff --git a/ixwebsocket/IXWebSocket.cpp b/ixwebsocket/IXWebSocket.cpp
+index f9b8075..0e3abaa 100644
+--- a/ixwebsocket/IXWebSocket.cpp
++++ b/ixwebsocket/IXWebSocket.cpp
+@@ -440,13 +440,16 @@ namespace ix
+ 
+                     bool binary = messageKind == WebSocketTransport::MessageKind::MSG_BINARY;
+ 
+-                    _onMessageCallback(ix::make_unique<WebSocketMessage>(webSocketMessageType,
+-                                                                         msg,
+-                                                                         wireSize,
+-                                                                         webSocketErrorInfo,
+-                                                                         WebSocketOpenInfo(),
+-                                                                         WebSocketCloseInfo(),
+-                                                                         binary));
++                    auto message = ix::make_unique<WebSocketMessage>(webSocketMessageType,
++                                                                     msg,
++                                                                     wireSize,
++                                                                     webSocketErrorInfo,
++                                                                     WebSocketOpenInfo(),
++                                                                     WebSocketCloseInfo(),
++                                                                     binary);
++                    message->wakeTime = _ws.wakeTime();
++                    message->readTime = _ws.readTime();
++                    _onMessageCallback(message);
+ 
+                     WebSocket::invokeTrafficTrackerCallback(wireSize, true);
+                 });
+diff --git a/ixwebsocket/IXWebSocketMessage.h b/ixwebsocket/IXWebSocketMessage.h
+index 25a00ce..48bd4ac 100644
+--- a/ixwebsocket/IXWebSocketMessage.h
++++ b/ixwebsocket/IXWebSocketMessage.h
+@@ -10,9 +10,13 @@
+ #include "IXWebSocketErrorInfo.h"
+ #include "IXWebSocketMessageType.h"
+ #include "IXWebSocketOpenInfo.h"
++#include <chrono>
+ #include <memory>
+ #include <string>
+ 
++// WebSocketMessage carries steady_clock receive times (local patch).
++#define IXWEBSOCKET_HAS_RECEIVE_TIMES 1
++
+ namespace ix
+ {
+     struct WebSocketMessage
+@@ -24,6 +28,10 @@ namespace ix
+         WebSocketOpenInfo openInfo;
+         WebSocketCloseInfo closeInfo;
+         bool binary;
++        // steady_clock times of the socket read that completed this message.
++        // Messages completed by the same read share them.
++        std::chrono::steady_clock::time_point wakeTime; // poll() saw data
++        std::chrono::steady_clock::time_point readTime; // read + TLS finished
+ 
+         WebSocketMessage(WebSocketMessageType t,
+                          const std::string& s,
+diff --git a/ixwebsocket/IXWebSocketTransport.cpp b/ixwebsocket/IXWebSocketTransport.cpp
+index fb3c40a..db5a711 100644
+--- a/ixwebsocket/IXWebSocketTransport.cpp
++++ b/ixwebsocket/IXWebSocketTransport.cpp
+@@ -376,10 +376,12 @@ namespace ix
+         }
+         else if (pollResult == PollResultType::ReadyForRead)
+         {
++            _wakeTime = std::chrono::steady_clock::now();
+             if (!receiveFromSocket())
+             {
+                 return PollResult::AbnormalClose;
+             }
++            _readTime = std::chrono::steady_clock::now();
+         }
+         else if (pollResult == PollResultType::Error)
+         {
+diff --git a/ixwebsocket/IXWebSocketTransport.h b/ixwebsocket/IXWebSocketTransport.h
+index f2391e1..c9c8557 100644
+--- a/ixwebsocket/IXWebSocketTransport.h
++++ b/ixwebsocket/IXWebSocketTransport.h
+@@ -21,6 +21,7 @@
+ #include "IXWebSocketSendData.h"
+ #include "IXWebSocketSendInfo.h"
+ #include <atomic>
++#include <chrono>
+ #include <cstdint>
+ #include <functional>
+ #include <list>
+@@ -110,6 +111,8 @@ namespace ix
+         void setOnCloseCallback(const OnCloseCallback& onCloseCallback);
+         void dispatch(PollResult pollResult, const OnMessageCallback& onMessageCallback);
+         size_t bufferedAmount() const;
++        std::chrono::steady_clock::time_point wakeTime() const { return _wakeTime; }
++        std::chrono::steady_clock::time_point readTime() const { return _readTime; }
+ 
+         // set ping heartbeat message
+         void setPingMessage(const std::string& message, SendMessageKind pingType);
+@@ -165,6 +168,10 @@ namespace ix
+         // data messages. That buffer is resized
+         std::vector<uint8_t> _rxbuf;
+ 
++        // When poll() last saw data, and when the read that followed finished.
++        std::chrono::steady_clock::time_point _wakeTime;
++        std::chrono::steady_clock::time_point _readTime;
++
+         // If set to a positive value, only read bytes from the socket until
+         // _rxbuf has reached this size to avoid unnecessary erase churn.
+         uint64_t _rxbufWanted = 0;
