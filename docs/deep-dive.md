@@ -301,6 +301,26 @@ includes waiting behind earlier messages from the same read.
 - **`T` and `E` are context, not a measurement.** Binance stamps `T` when it matches the trade and
   `E` when it sends it. Both are parsed into each `Trade`, but nothing is timed from them.
 
+**A long run fills the recorders.** Each row keeps its first 10'000 samples. In a longer run of
+37'682 messages, the two per-message rows filled up and counted the rest:
+
+```
+binance-btcusdt                      count      min      p50      p90      p95      p99      max
+  read + TLS (wake → read)           2'582      5.8    156.4    277.0    292.1    425.6   9805.8
+  decode (read → t0)                 2'582      0.5      7.2     12.7     18.6     40.7    198.5
+  parse, encode, enqueue (t0 → t1)  10'000      2.9     11.2     24.0     72.9    162.2  12566.9
+                                  (27'682 more not recorded: recorder full)
+  total (wake → t1)                 10'000     13.4    503.0   1152.6   1408.0   2381.2  14684.0
+                                  (27'682 more not recorded: recorder full)
+```
+
+- The two per-message rows describe only the first 10'000 messages. The other 27'682 were
+  counted, but they aren't in the percentiles.
+- The two per-read rows didn't fill: 2'582 reads, about 15 messages per read across the run.
+- To cover a whole run, a recorder would have to keep a histogram (fixed buckets, a fixed amount
+  of memory, never full) instead of every sample. Its percentiles would then be approximate, to
+  within one bucket.
+
 **Where `wake` and `read` come from.** IXWebSocket doesn't expose them, so laptime patches it.
 [third_party/ixwebsocket/receive-times.patch](../third_party/ixwebsocket/receive-times.patch) adds
 two `steady_clock` readings around the read in `WebSocketTransport::poll()` and copies them into
