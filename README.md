@@ -66,14 +66,36 @@ docker exec -it kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-serve
 ```
 
 The program prints `Connection established` when the WebSocket opens. On exit it prints a
-latency table per stream (min, p50, p90, p95, p99, max in nanoseconds), then
-`% Kafka delivery stats: <n> delivered, <m> failed`.
+latency table per stream, in microseconds, then `% Kafka delivery stats: <n> delivered, <m> failed`.
+From a recorded run:
 
-Each latency sample is the time one WebSocket message spends inside laptime: from the moment
-IXWebSocket hands it over, through parsing, encoding and the Kafka produce call, until the call
-returns. It does not include the network, the exchange, the WebSocket layer (TLS decryption and
-frame decoding), or Kafka delivery. Messages that contain no trades are not counted. The first
-10'000 samples are kept, and the table says how many arrived after that.
+```
+binance-btcusdt                      count      min      p50      p90      p95      p99      max
+  read + TLS (wake → read)             251      7.5     92.8    216.4    245.8    492.7   7706.8
+  decode (read → t0)                   251      0.6      5.4     12.0     17.0     52.7    439.3
+  parse, encode, enqueue (t0 → t1)   7'521      3.0     18.4     21.7     29.3    155.8  19719.2
+  total (wake → t1)                  7'521     23.0    575.9   1506.5   1914.9   9724.4  21488.6
+```
+
+- **read + TLS** and **decode** happen inside IXWebSocket. A small patch,
+  [third_party/ixwebsocket/receive-times.patch](third_party/ixwebsocket/receive-times.patch), which
+  CMake applies, times them. One socket read can carry many messages, so these two rows count each
+  read once.
+- **parse, encode, enqueue** is laptime's own work, until the Kafka produce call returns.
+- **total** runs from the moment the socket had data to the end of the enqueue. It includes any
+  wait behind earlier messages from the same read.
+
+None of it includes the network, the exchange, or Kafka delivery. Messages that contain no trades
+are not counted. Each row keeps its first 10'000 samples, and the table says how many arrived after
+that.
+
+Every Kafka record also carries these times as headers (`laptime.wake_ns`, `laptime.read_ns`,
+`laptime.start_ns`, `laptime.produce_ns`), so a reader downstream can time it too. To see them:
+
+```bash
+docker exec -it kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 \
+    --topic trades --formatter-property print.headers=true
+```
 
 In **CLion**, open the folder and run the `laptime` target. The red Stop button sends SIGINT, which
 triggers the same clean shutdown as Ctrl+C.
@@ -81,5 +103,5 @@ triggers the same clean shutdown as Ctrl+C.
 ## Going deeper
 
 [docs/deep-dive.md](docs/deep-dive.md) explains how it works inside: the four stages, the
-`Trade` model, config and factories, ownership, threads, shutdown, and what happens when
-something goes wrong.
+`Trade` model, config and factories, ownership, threads, shutdown, what happens when
+something goes wrong, how latency is measured, and the timing headers in Kafka.
