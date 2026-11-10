@@ -302,9 +302,11 @@ includes waiting behind earlier messages from the same read.
   `E` when it sends it. Both are parsed into each `Trade`, but nothing is timed from them.
 
 **A long run fills the recorders.** Each row keeps its first 10'000 samples. In a longer run of
-37'682 messages, the two per-message rows filled up and counted the rest:
+37'682 messages, the two per-message rows filled up and counted the rest (times in µs):
 
 ```
+Per-message latency in µs, steady clock
+
 binance-btcusdt                      count      min      p50      p90      p95      p99      max
   read + TLS (wake → read)           2'582      5.8    156.4    277.0    292.1    425.6   9805.8
   decode (read → t0)                 2'582      0.5      7.2     12.7     18.6     40.7    198.5
