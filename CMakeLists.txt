@@ -39,8 +39,7 @@ FetchContent_Declare(json
 
 FetchContent_MakeAvailable(ixwebsocket librdkafka json)
 
-
-add_executable(laptime src/main.cc
+add_library(laptime_core STATIC
         src/adaptors/adaptor.h
         src/adaptors/adaptor_factory.h
         src/adaptors/binance/binance_adaptor.cc
@@ -74,6 +73,26 @@ add_executable(laptime src/main.cc
         src/common/latency_recorder.h
         src/common/message_times.h
 )
-target_include_directories(laptime PUBLIC src)
-target_link_libraries(laptime PUBLIC ixwebsocket::ixwebsocket rdkafka++ nlohmann_json::nlohmann_json)
+target_include_directories(laptime_core PUBLIC src)
+target_link_libraries(laptime_core PUBLIC ixwebsocket::ixwebsocket rdkafka++ nlohmann_json::nlohmann_json)
+target_compile_options(laptime_core PRIVATE -Wall -Wextra)
+
+add_executable(laptime src/main.cc)
+target_link_libraries(laptime PRIVATE laptime_core)
 target_compile_options(laptime PRIVATE -Wall -Wextra)
+
+# --- Google Benchmark ---
+option(LAPTIME_BUILD_BENCHMARKS "Build the micro-benchmarks in bench/" ON)
+if(LAPTIME_BUILD_BENCHMARKS)
+    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(benchmark
+            GIT_REPOSITORY https://github.com/google/benchmark.git
+            GIT_TAG        a6b4a9f00b36c19af9997d68a1cf6e0b5b3d032c  # v1.10.0
+            GIT_SHALLOW    TRUE)
+    FetchContent_MakeAvailable(benchmark)
+
+    add_executable(laptime_bench bench/hot_path_bench.cc)
+    target_link_libraries(laptime_bench PRIVATE laptime_core benchmark::benchmark_main)
+    target_compile_options(laptime_bench PRIVATE -Wall -Wextra)
+endif()
