@@ -44,8 +44,9 @@ A small C++20 feed handler, built one concept at a time. This README describes t
 You need a C++20 compiler (Apple clang from the Xcode Command Line Tools), CMake 3.30+,
 OpenSSL 3 (`brew install openssl@3`) and Docker for Kafka. The C++ libraries are pinned and
 downloaded by CMake on the first configure: [IXWebSocket](https://github.com/machinezone/IXWebSocket)
-12.0.1, [librdkafka](https://github.com/confluentinc/librdkafka) 2.16.0 and
-[nlohmann/json](https://github.com/nlohmann/json) 3.12.0.
+12.0.1, [librdkafka](https://github.com/confluentinc/librdkafka) 2.16.0,
+[nlohmann/json](https://github.com/nlohmann/json) 3.12.0 and, for the benchmarks,
+[Google Benchmark](https://github.com/google/benchmark) 1.10.0.
 
 ```bash
 # 1. Kafka (single node) and the topic
@@ -99,6 +100,37 @@ docker exec -it kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-serve
 
 In **CLion**, open the folder and run the `laptime` target. The red Stop button sends SIGINT, which
 triggers the same clean shutdown as Ctrl+C.
+
+## Benchmarks
+
+[bench/hot_path_bench.cc](bench/hot_path_bench.cc) times each stage of the per-message path on its
+own, with Google Benchmark, on a real Binance trade message. The build above already builds it.
+Use a Release build: numbers from a Debug build mean nothing.
+
+```bash
+cmake --build build --target laptime_bench
+./build/laptime_bench --benchmark_repetitions=5 --benchmark_report_aggregates_only=true
+```
+
+In **CLion**, choose the Release profile and run the `laptime_bench` target. Medians of 5
+repetitions on an Apple silicon Mac with 8 GB:
+
+| Benchmark | What it times | Median |
+|---|---|---|
+| `BM_SteadyNanos` | One `SteadyNanos()` clock reading | 15.2 ns |
+| `BM_RecordSample` | 10'000 `RecordSample` calls into a fresh recorder | 3'978 ns, about 0.4 ns each |
+| `BM_Parse` | `BinanceAdaptor::Parse`: JSON → `Trade` | 2'103 ns |
+| `BM_ToJson` | `ToJson`: `Trade` → JSON | 1'589 ns |
+| `BM_ParseAndEncode` | Both together | 3'692 ns |
+
+- The loops run the same message over and over, warm in cache. So they're lower than the live
+  `t0 → t1` row in the shutdown report, which also includes the timing headers, `produce()` and
+  cold caches.
+- Numbers move with machine load: a quieter run gave `BM_Parse` 1'482 ns. Compare medians from
+  `--benchmark_repetitions`, not single runs.
+- `--benchmark_min_time=10s` runs each benchmark for at least 10 s.
+- On macOS, "Unable to determine clock rate" and "Failed to set thread affinity" are harmless.
+- `-DLAPTIME_BUILD_BENCHMARKS=OFF` at configure time skips building them.
 
 ## Going deeper
 
