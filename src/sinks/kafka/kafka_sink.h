@@ -40,7 +40,7 @@ class KafkaSink final : public Sink {
     }
   }
 
-  void Publish(std::string_view, std::string_view) override;
+  void Publish(std::string_view, std::string_view, const MessageTimes&) override;
 
   void Flush() override;
 

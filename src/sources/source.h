@@ -8,11 +8,13 @@
 #include <functional>
 #include <string_view>
 
+#include "common/message_times.h"
+
 namespace laptime {
 
 class Source {
  public:
-  using MessageHandler = std::function<void(std::string_view)>;
+  using MessageHandler = std::function<void(std::string_view, MessageTimes)>;
   virtual ~Source() = default;
   virtual void Start() = 0;
   virtual void Stop() = 0;

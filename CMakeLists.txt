@@ -72,6 +72,7 @@ add_executable(laptime src/main.cc
         src/common/clock.h
         src/common/latency_recorder.cc
         src/common/latency_recorder.h
+        src/common/message_times.h
 )
 target_include_directories(laptime PUBLIC src)
 target_link_libraries(laptime PUBLIC ixwebsocket::ixwebsocket rdkafka++ nlohmann_json::nlohmann_json)

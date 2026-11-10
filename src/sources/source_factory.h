@@ -17,7 +17,7 @@
 namespace laptime {
 
 inline const Source::MessageHandler kDefaultOnMessage =
-    [](const std::string_view content) {
+    [](const std::string_view content, const MessageTimes&) {
       std::cout << "Message Received : " << content << std::endl;
     };
 

@@ -10,11 +10,16 @@
 
 namespace laptime {
 
+
+inline int64_t ToNanos(const std::chrono::steady_clock::time_point time) {
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+             time.time_since_epoch())
+      .count();
+}
+
 // Monotonic Clock.
 inline int64_t SteadyNanos() {
-  return std::chrono::duration_cast<std::chrono::nanoseconds>(
-             std::chrono::steady_clock::now().time_since_epoch())
-      .count();
+  return ToNanos(std::chrono::steady_clock::now());
 }
 
 }  // namespace laptime

@@ -7,6 +7,8 @@
 
 #include <string_view>
 
+#include "common/message_times.h"
+
 namespace laptime {
 
 class Sink {
@@ -18,7 +20,8 @@ class Sink {
 
   virtual ~Sink() = default;
 
-  virtual void Publish(std::string_view, std::string_view) = 0;
+  virtual void Publish(std::string_view, std::string_view,
+                       const MessageTimes&) = 0;
   virtual void Flush() = 0;
 };
 

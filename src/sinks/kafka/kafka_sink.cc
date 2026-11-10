@@ -4,11 +4,34 @@
 
 #include "sinks/kafka/kafka_sink.h"
 
+#include <charconv>
 #include <iostream>
+#include <iterator>
+#include <memory>
+#include <string>
+
+#include "common/clock.h"
 
 namespace laptime {
 
-void KafkaSink::Publish(std::string_view key, std::string_view msg_to_publish) {
+namespace {
+// Adds `nanos` as decimal text, so any Kafka tool can print it.
+void AddNanos(RdKafka::Headers& headers, const std::string& key,
+              const int64_t nanos) {
+  char text[20];
+  const char* end = std::to_chars(std::begin(text), std::end(text), nanos).ptr;
+  headers.add(key, text, end - text);
+}
+}  // namespace
+
+void KafkaSink::Publish(std::string_view key, std::string_view msg_to_publish,
+                        const MessageTimes& times) {
+  std::unique_ptr<RdKafka::Headers> headers(RdKafka::Headers::create());
+  AddNanos(*headers, "laptime.wake_ns", times.wake_ns);
+  AddNanos(*headers, "laptime.read_ns", times.read_ns);
+  AddNanos(*headers, "laptime.start_ns", times.start_ns);
+  AddNanos(*headers, "laptime.produce_ns", SteadyNanos());
+
   RdKafka::ErrorCode err;
   do {
     err = producer_->produce(
@@ -19,7 +42,7 @@ void KafkaSink::Publish(std::string_view key, std::string_view msg_to_publish) {
         /* Value */
         const_cast<char *>(msg_to_publish.data()), msg_to_publish.size(),
         /* Key */
-        const_cast<char *>(key.data()), key.size(), 0, nullptr, nullptr);
+        const_cast<char *>(key.data()), key.size(), 0, headers.get(), nullptr);
 
     if (err == RdKafka::ERR__QUEUE_FULL) {
       // Queue full: let librdkafka deliver some messages before retrying.
@@ -27,7 +50,9 @@ void KafkaSink::Publish(std::string_view key, std::string_view msg_to_publish) {
     }
   } while (err == RdKafka::ERR__QUEUE_FULL);
 
-  if (err != RdKafka::ERR_NO_ERROR) {
+  if (err == RdKafka::ERR_NO_ERROR) {
+    headers.release();  // produce() already deleted them: don't delete again
+  } else {
     std::cerr << "% Failed to produce to topic " << topic_ << ": "
               << RdKafka::err2str(err) << std::endl;
   }

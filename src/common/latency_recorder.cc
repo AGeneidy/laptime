@@ -5,13 +5,18 @@
 #include "common/latency_recorder.h"
 
 #include <algorithm>
-#include <iomanip>
+#include <format>
 #include <ostream>
 #include <string>
 
 namespace laptime {
 
 namespace {
+
+// Column widths of the report table.
+constexpr int kLabelWidth = 34;
+constexpr int kCountWidth = 8;
+constexpr int kValueWidth = 9;
 
 std::string WithSeparators(int64_t value) {
   std::string digits = std::to_string(value);
@@ -46,27 +51,36 @@ LatencySummary LatencyRecorder::GetSummary() const {
   };
 }
 
-std::ostream& operator<<(std::ostream& out, const LatencySummary& summary) {
-  if (summary.sample_size == 0) return out << "  no messages\n";
-
-  out << WithSeparators(static_cast<int64_t>(summary.sample_size))
-      << " messages";
-  if (summary.dropped > 0) {
-    out << " (" << WithSeparators(summary.dropped)
-        << " more not recorded: recorder full)";
+void PrintLatencyHeader(std::ostream& out, const std::string_view title) {
+  // std::format pads by what you see, so "→" and "µ" take one column each.
+  out << std::format("{:<{}}{:>{}}", title, kLabelWidth, "count", kCountWidth);
+  for (const char* column : {"min", "p50", "p90", "p95", "p99", "max"}) {
+    out << std::format("{:>{}}", column, kValueWidth);
   }
-  out << ":\n";
-  const auto row = [&out](const char* label, int64_t nanos) {
-    out << "  " << label << ' ' << std::setw(13) << WithSeparators(nanos)
-        << " ns\n";
-  };
-  row("min", summary.min);
-  row("p50", summary.p50);
-  row("p90", summary.p90);
-  row("p95", summary.p95);
-  row("p99", summary.p99);
-  row("max", summary.max);
+  out << '\n';
+}
 
-  return out;
+void PrintLatencyRow(std::ostream& out, const std::string_view label,
+                     const LatencySummary& summary) {
+  out << std::format("{:<{}}{:>{}}", label, kLabelWidth,
+                     WithSeparators(static_cast<int64_t>(summary.sample_size)),
+                     kCountWidth);
+  const auto cell = [&out](const int64_t nanos) {
+    out << std::format("{:>{}.1f}", static_cast<double>(nanos) / 1'000,
+                       kValueWidth);
+  };
+  if (summary.sample_size > 0) {
+    cell(summary.min);
+    cell(summary.p50);
+    cell(summary.p90);
+    cell(summary.p95);
+    cell(summary.p99);
+    cell(summary.max);
+  }
+  out << '\n';
+  if (summary.dropped > 0) {
+    out << std::format("{:<{}}({} more not recorded: recorder full)\n", "",
+                       kLabelWidth, WithSeparators(summary.dropped));
+  }
 }
 }  // namespace laptime

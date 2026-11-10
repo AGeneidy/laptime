@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iosfwd>
+#include <string_view>
 #include <vector>
 
 namespace laptime {
@@ -44,7 +45,11 @@ class LatencyRecorder {
   size_t current_index_ = 0;
   int64_t dropped_ = 0;
 };
-std::ostream& operator<<(std::ostream& out, const LatencySummary& summary);
+// The report is a table in microseconds: a header row titled `title`, then
+// one row per stretch.
+void PrintLatencyHeader(std::ostream& out, std::string_view title);
+void PrintLatencyRow(std::ostream& out, std::string_view label,
+                     const LatencySummary& summary);
 
 }  // namespace laptime
 

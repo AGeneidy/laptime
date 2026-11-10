@@ -34,10 +34,20 @@ class FeedHandler {
   FeedHandler& operator=(const FeedHandler&) = delete;
 
   void ReportLatency(std::ostream& out) const {
+    out << '\n' << "Per-message latency in µs, steady clock" << '\n';
     for (const auto& stream : streams_) {
-      out << '\n' << "latency for stream " << stream->name() << ":\n"
-          << stream->SummarizeLatency();
+      const StreamLatency latency = stream->SummarizeLatency();
+      out << '\n';
+      PrintLatencyHeader(out, stream->name());
+      PrintLatencyRow(out, "  read + TLS (wake → read)", latency.read);
+      PrintLatencyRow(out, "  decode (read → t0)", latency.decode);
+      PrintLatencyRow(out, "  parse, encode, enqueue (t0 → t1)",
+                      latency.enqueue);
+      PrintLatencyRow(out, "  total (wake → t1)", latency.total);
     }
+    out << '\n'
+        << "read + TLS and decode count each socket read once. total also\n"
+        << "includes waiting behind earlier messages from the same read.\n";
   }
 
   ~FeedHandler() { Stop(); }
