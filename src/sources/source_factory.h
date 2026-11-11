@@ -11,15 +11,21 @@
 #include <variant>
 
 #include "model/config/source_config.h"
+#include "sources/file/file_source.h"
 #include "sources/source.h"
 #include "sources/websocket/websocket_source.h"
 
 namespace laptime {
 
 inline const Source::MessageHandler kDefaultOnMessage =
-    [](const std::string_view content, const MessageTimes&) {
+    [](const std::string_view content, const MessageTimes &) {
       std::cout << "Message Received : " << content << std::endl;
     };
+
+inline std::unique_ptr<Source> SourceOf(
+    const FileConfig &config, const Source::MessageHandler &on_message) {
+  return std::make_unique<FileSource>(config, on_message);
+}
 
 inline std::unique_ptr<Source> SourceOf(
     const WebSocketConfig &config, const Source::MessageHandler &on_message) {

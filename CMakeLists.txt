@@ -72,6 +72,9 @@ add_library(laptime_core STATIC
         src/common/latency_recorder.cc
         src/common/latency_recorder.h
         src/common/message_times.h
+        src/sinks/discard/discard_sink.h
+        src/sources/file/file_source.cc
+        src/sources/file/file_source.h
 )
 target_include_directories(laptime_core PUBLIC src)
 target_link_libraries(laptime_core PUBLIC ixwebsocket::ixwebsocket rdkafka++ nlohmann_json::nlohmann_json)
@@ -95,4 +98,6 @@ if(LAPTIME_BUILD_BENCHMARKS)
     add_executable(laptime_bench bench/hot_path_bench.cc)
     target_link_libraries(laptime_bench PRIVATE laptime_core benchmark::benchmark_main)
     target_compile_options(laptime_bench PRIVATE -Wall -Wextra)
+    target_compile_definitions(laptime_bench PRIVATE
+            LAPTIME_TESTDATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/testdata")
 endif()

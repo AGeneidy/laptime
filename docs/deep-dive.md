@@ -17,10 +17,10 @@ How laptime works inside. For the big picture, start with the [README](../README
 
 | Stage | Its job | Contract (interface) | Today | In → out |
 |---|---|---|---|---|
-| **Source** | Bring raw messages in from a feed (network, file, …) | `Source`: `Start()`, `Stop()`, calls `on_message(text, times)` | `WebSocketSource` | feed → `std::string_view` + `MessageTimes` |
+| **Source** | Bring raw messages in from a feed (network, file, …) | `Source`: `Start()`, `Stop()`, calls `on_message(text, times)` | `WebSocketSource`, `FileSource` | feed → `std::string_view` + `MessageTimes` |
 | **Adaptor** | Understand one exchange's format | `Adaptor`: `Parse(text)` → `std::vector<Trade>` | `BinanceAdaptor` | text → `Trade`s |
 | **Encoder** | Turn a `Trade` into bytes | `Encoder`: a function pointer, `std::string (*)(const Trade&)` | `ToJson` | `Trade` → `std::string` |
-| **Sink** | Deliver bytes somewhere (Kafka, file, …) | `Sink`: `Publish(key, value, times)`, `Flush()` | `KafkaSink` | bytes → destination |
+| **Sink** | Deliver bytes somewhere (Kafka, file, …) | `Sink`: `Publish(key, value, times)`, `Flush()` | `KafkaSink`, `DiscardSink` | bytes → destination |
 
 Each stage changes for a different reason. A new exchange needs a new Adaptor. A new wire format
 needs a new Encoder. A new destination needs a new Sink. A new transport needs a new Source.
@@ -90,13 +90,14 @@ Each stage has one config struct per implementation. The structs are grouped in 
 `std::variant`, so a config value holds exactly one of them:
 
 ```cpp
+struct DiscardSinkConfig {};
+
 struct KafkaSinkConfig {
   std::string brokers;
   std::string topic;
 };
 
-using SinkConfig = std::variant<KafkaSinkConfig>;
-// Later: std::variant<KafkaSinkConfig, DiscardSinkConfig>
+using SinkConfig = std::variant<KafkaSinkConfig, DiscardSinkConfig>;
 ```
 
 `StreamConfig` holds one of each kind (`source`, `adaptor`, `encoder`, `sink`), and
@@ -117,7 +118,8 @@ FeedHandler feed{FeedHandlerConfig{.streams = {config}}};
 
 A config only **describes** what to build. It never opens a socket and never creates anything.
 All config types live in [src/model/config/](../src/model/config/). An empty struct such as
-`BinanceAdaptorConfig{}` still matters: its **type** is what selects the implementation.
+`BinanceAdaptorConfig{}` or `DiscardSinkConfig{}` still matters: its **type** is what selects the
+implementation.
 
 ## 4. Factories: `std::visit` picks the class
 
@@ -125,6 +127,10 @@ Each kind has a factory header with one `…Of()` overload per config type, and 
 function that dispatches between them:
 
 ```cpp
+inline std::unique_ptr<Sink> SinkOf(const DiscardSinkConfig&) {
+  return std::make_unique<DiscardSink>();
+}
+
 inline std::unique_ptr<Sink> SinkOf(const KafkaSinkConfig& config) {
   return std::make_unique<KafkaSink>(config);
 }
@@ -139,7 +145,8 @@ inline std::unique_ptr<Sink> CreateSink(const SinkConfig& config) {
 for that type. Overload resolution happens at **compile time**, once for each type the variant can
 hold. Add a type to the variant without adding its `…Of()` overload, and the `std::visit` line
 **doesn't compile**. You can't get an "unknown type" error at runtime, and there is no `switch`
-to keep up to date.
+to keep up to date. Adding `FileConfig` before its `SourceOf` stopped the build with
+"`std::visit` requires the visitor to be exhaustive".
 
 Factories hand back ownership: `CreateSource`, `CreateAdaptor` and `CreateSink` return a
 `std::unique_ptr`, and `CreateEncoder` returns a function pointer.
@@ -150,6 +157,8 @@ Factories hand back ownership: `CreateSource`, `CreateAdaptor` and `CreateSink` 
   `Stream` owns its four stages. There is no `shared_ptr` anywhere.
 - **Copying is deleted** on `FeedHandler`, `Stream`, `Sink` and `KafkaSink`. Each of them owns
   something real (a thread, a socket, a Kafka producer). A copy would mean two owners of one socket.
+  `FileSource` can't be copied either: its lines are `std::string_view`s into its own buffer, so a
+  copy's lines would still point into the original.
 - **Why `unique_ptr<Stream>` and not `Stream` in the vector.** The source's callback captures
   `this` (the `Stream`), so a `Stream` must never move. On the heap its address stays fixed, even
   when the vector grows.
@@ -170,7 +179,9 @@ Factories hand back ownership: `CreateSource`, `CreateAdaptor` and `CreateSink` 
   ```
 
 - **Nothing runs during construction.** The `Stream` constructor creates the source last, and the
-  source only connects when `Start()` is called. No message can arrive before all four stages exist.
+  source sends nothing before `Start()`. `WebSocketSource` connects only then. `FileSource` reads
+  its whole file in the constructor, but replays it only in `Start()`. No message can arrive before
+  all four stages exist.
 
 ## 6. Threads: who runs what
 
@@ -179,6 +190,7 @@ Factories hand back ownership: `CreateSource`, `CreateAdaptor` and `CreateSink` 
 | **main** | the OS | Builds everything, sleeps in 100 ms steps, then runs the whole shutdown and prints the latency report |
 | **IXWebSocket's thread** (one per stream) | `ix::WebSocket::start()` | Connecting and reconnecting, reading frames, and **our whole per-message path**: `OnMessage` → `Parse` → `ToJson` → `Publish` |
 | **librdkafka's threads** | `RdKafka::Producer::create()` | Batching, sending to the broker, retries |
+| **The thread that calls `Start()`**, with `FileSource` | (no new thread) | The whole replay: every line goes through `OnMessage`, and `Start()` returns when the file is done |
 
 - **No locks in our code.** Each stream's per-message work runs on that stream's own socket
   thread, and streams share nothing. The only cross-thread values are the stop flag (an atomic),
@@ -240,6 +252,7 @@ first), and `~KafkaSink` prints the delivery stats.
 | librdkafka's queue is full | `Publish` waits (`poll(1000)`) and retries. This blocks the socket thread (back-pressure) |
 | Kafka rejects a message | Printed when it happens, counted, and totalled at exit |
 | A Kafka setting is invalid | The `KafkaSink` constructor throws at startup and the program stops before anything runs |
+| `FileSource`'s file is missing or can't be read | The constructor throws (`std::filesystem::filesystem_error` with the path, or `std::runtime_error`) and the program stops before anything runs |
 | IXWebSocket is built without the patch | `websocket_source.cc` stops the build with `#error`, so the times can never be missing silently |
 
 ## 9. Measuring latency
@@ -386,6 +399,8 @@ laptime.wake_ns:165344562181791,laptime.read_ns:165344562248916,laptime.start_ns
 - **The values are `steady_clock` nanoseconds, as decimal text.** Only differences mean anything:
   the zero point is arbitrary, not a date, so compare them only with readings from the same
   machine. Text was chosen so any Kafka tool can print them.
+- **`FileSource` has no socket times.** It leaves `wake_ns` and `read_ns` at 0, so those two
+  headers are `0` for replayed records.
 - **Headers, not the body.** The JSON value is still exactly the `Trade`, so readers that don't
   care never see the times. And `produce_ns` is taken after `ToJson` has already built the body.
 - **Who owns the headers.** A successful `produce()` deletes them itself (librdkafka's

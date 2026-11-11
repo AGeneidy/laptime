@@ -23,15 +23,15 @@ A small C++20 feed handler, built one concept at a time. This README describes t
   4. **`Sink`** publishes the bytes.
 
   The arrows carry exactly those three things: message, `Trade`, bytes.
-- **Every stage is swappable.** Each stage is an interface. The bold name is what's built today,
-  and the grey ones could take its place without touching the other three stages:
+- **Every stage is swappable.** Each stage is an interface. The table shows what's built today,
+  and what could take its place without touching the other three stages:
 
   | Stage | Built today | Could also be |
   |---|---|---|
-  | `Source` | `WebSocketSource` | a file replay, a UDP multicast feed |
+  | `Source` | `WebSocketSource`, `FileSource` (replays a file, one message per line) | a UDP multicast feed |
   | `Adaptor` | `BinanceAdaptor` | a Coinbase or Kraken parser |
   | `Encoder` | `ToJson` | Protobuf, SBE |
-  | `Sink` | `KafkaSink` | a file, discard (drop everything, for benchmarks) |
+  | `Sink` | `KafkaSink`, `DiscardSink` (drops everything, for benchmarks) | a file |
 
   The WebSocket is part of the `Source` stage. It is how today's Source reads from Binance, not
   part of Binance.
@@ -103,9 +103,10 @@ triggers the same clean shutdown as Ctrl+C.
 
 ## Benchmarks
 
-[bench/hot_path_bench.cc](bench/hot_path_bench.cc) times each stage of the per-message path on its
-own, with Google Benchmark, on a real Binance trade message. The build above already builds it.
-Use a Release build: numbers from a Debug build mean nothing.
+[bench/hot_path_bench.cc](bench/hot_path_bench.cc) uses Google Benchmark. It times each stage of the
+per-message path on its own, on a real Binance trade message, and then the whole path on 1'000
+trades from [testdata/](testdata/). The build above already builds it. Use a Release build:
+numbers from a Debug build mean nothing.
 
 ```bash
 cmake --build build --target laptime_bench
@@ -117,15 +118,25 @@ repetitions on an Apple silicon Mac with 8 GB:
 
 | Benchmark | What it times | Median |
 |---|---|---|
-| `BM_SteadyNanos` | One `SteadyNanos()` clock reading | 15.2 ns |
-| `BM_RecordSample` | 10'000 `RecordSample` calls into a fresh recorder | 3'978 ns, about 0.4 ns each |
-| `BM_Parse` | `BinanceAdaptor::Parse`: JSON → `Trade` | 2'103 ns |
-| `BM_ToJson` | `ToJson`: `Trade` → JSON | 1'589 ns |
-| `BM_ParseAndEncode` | Both together | 3'692 ns |
+| `BM_SteadyNanos` | One `SteadyNanos()` clock reading | 15.5 ns |
+| `BM_RecordSample` | 10'000 `RecordSample` calls into a fresh recorder | 3'943 ns, about 0.4 ns each |
+| `BM_Parse` | `BinanceAdaptor::Parse`: JSON → `Trade` | 2'102 ns |
+| `BM_ToJson` | `ToJson`: `Trade` → JSON | 1'592 ns |
+| `BM_ParseAndEncode` | Both together | 3'703 ns |
+| `BM_ReplayStream` | The whole `Stream` on 1'000 trades: `FileSource` → `OnMessage` → `DiscardSink` | 3.71 ms, so 3.71 µs per trade |
 
-- The loops run the same message over and over, warm in cache. So they're lower than the live
-  `t0 → t1` row in the shutdown report, which also includes the timing headers, `produce()` and
-  cold caches.
+- `BM_ReplayStream` costs the same per trade as `BM_ParseAndEncode`: the `Stream` around parsing
+  and encoding adds almost nothing. A run without `--benchmark_report_aggregates_only` also ends
+  its row with `1000 trades per replay, … µs per trade`.
+- The loops run the same messages over and over, warm in cache, and `BM_ReplayStream` sends to
+  `DiscardSink`, not Kafka. So they're lower than the live `t0 → t1` row in the shutdown report,
+  which also includes the timing headers, `produce()` and cold caches. Use them to compare code
+  changes, not to predict live latency.
+- [testdata/binance-btcusdt-trades.jsonl](testdata/binance-btcusdt-trades.jsonl) holds 1'000
+  consecutive BTCUSDT trades (IDs 6840783756–6840784755). They were fetched from Binance's REST API
+  (`/api/v3/historicalTrades`, in microseconds) and written in the WebSocket trade format, one
+  message per line. The REST API has no event time, so `E` is a copy of `T`. Every other field
+  matched the WebSocket's, compared on 1'445 trades recorded from it.
 - Numbers move with machine load: a quieter run gave `BM_Parse` 1'482 ns. Compare medians from
   `--benchmark_repetitions`, not single runs.
 - `--benchmark_min_time=10s` runs each benchmark for at least 10 s.

@@ -10,12 +10,14 @@
 
 namespace laptime {
 
+struct DiscardSinkConfig {};
+
 struct KafkaSinkConfig {
   std::string brokers;
   std::string topic;
 };
 
-using SinkConfig = std::variant<KafkaSinkConfig>;
+using SinkConfig = std::variant<KafkaSinkConfig, DiscardSinkConfig>;
 
 }  // namespace laptime
 

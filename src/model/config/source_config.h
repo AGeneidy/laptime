@@ -10,11 +10,15 @@
 
 namespace laptime {
 
+struct FileConfig {
+  std::string path;
+};
+
 struct WebSocketConfig {
   std::string url;
 };
 
-using SourceConfig = std::variant<WebSocketConfig>;
+using SourceConfig = std::variant<WebSocketConfig, FileConfig>;
 
 }  // namespace laptime
 

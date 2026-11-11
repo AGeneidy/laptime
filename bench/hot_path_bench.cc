@@ -3,6 +3,8 @@
 #include <benchmark/benchmark.h>
 
 #include <cstddef>
+#include <cstdint>
+#include <format>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -13,6 +15,7 @@
 #include "common/clock.h"
 #include "common/latency_recorder.h"
 #include "encoders/json/trade_json.h"
+#include "feed/stream.h"
 #include "model/trade.h"
 
 namespace laptime {
@@ -80,6 +83,30 @@ void BM_ParseAndEncode(benchmark::State& state) {
   }
 }
 BENCHMARK(BM_ParseAndEncode);
+
+void BM_ReplayStream(benchmark::State& state) {
+  // The whole path for a recorded feed: FileSource → Stream::OnMessage
+  // (parse, encode, timing, recorders) → DiscardSink.
+  Stream stream(StreamConfig{
+      .name = "replay",
+      .source =
+          FileConfig{LAPTIME_TESTDATA_DIR "/binance-btcusdt-trades.jsonl"},
+      .sink = DiscardSinkConfig{},
+      .adaptor = BinanceAdaptorConfig{},
+      .encoder = JsonEncoderConfig{}});
+  const int64_t begin = SteadyNanos();
+  for (auto _ : state) {
+    stream.Start();  // replays every line on this thread
+  }
+  const int64_t elapsed = SteadyNanos() - begin;
+  const LatencySummary summary = stream.SummarizeLatency().enqueue;
+  const int64_t trades =
+      static_cast<int64_t>(summary.sample_size) + summary.dropped;
+  state.SetLabel(std::format("{} trades per replay, {:.2f} µs per trade",
+                             trades / state.iterations(),
+                             elapsed / 1000.0 / trades));
+}
+BENCHMARK(BM_ReplayStream)->Unit(benchmark::kMillisecond);
 
 }  // namespace
 }  // namespace laptime

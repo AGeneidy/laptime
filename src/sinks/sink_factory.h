@@ -9,10 +9,15 @@
 #include <variant>
 
 #include "model/config/sink_config.h"
+#include "sinks/discard/discard_sink.h"
 #include "sinks/kafka/kafka_sink.h"
 #include "sinks/sink.h"
 
 namespace laptime {
+
+inline std::unique_ptr<Sink> SinkOf(const DiscardSinkConfig&) {
+  return std::make_unique<DiscardSink>();
+}
 
 inline std::unique_ptr<Sink> SinkOf(const KafkaSinkConfig& config) {
   return std::make_unique<KafkaSink>(config);
