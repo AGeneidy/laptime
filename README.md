@@ -105,8 +105,8 @@ triggers the same clean shutdown as Ctrl+C.
 
 [bench/hot_path_bench.cc](bench/hot_path_bench.cc) uses Google Benchmark. It times each stage of the
 per-message path on its own, on a real Binance trade message, and then the whole path on 1'000
-trades from [testdata/](testdata/). The build above already builds it. Use a Release build:
-numbers from a Debug build mean nothing.
+trades from [testdata/](testdata/). Each row also says how many heap allocations it makes. The
+build above already builds it. Use a Release build: numbers from a Debug build mean nothing.
 
 ```bash
 cmake --build build --target laptime_bench
@@ -116,18 +116,26 @@ cmake --build build --target laptime_bench
 In **CLion**, choose the Release profile and run the `laptime_bench` target. Medians of 5
 repetitions on an Apple silicon Mac with 8 GB:
 
-| Benchmark | What it times | Median |
-|---|---|---|
-| `BM_SteadyNanos` | One `SteadyNanos()` clock reading | 15.5 ns |
-| `BM_RecordSample` | 10'000 `RecordSample` calls into a fresh recorder | 3'943 ns, about 0.4 ns each |
-| `BM_Parse` | `BinanceAdaptor::Parse`: JSON → `Trade` | 2'102 ns |
-| `BM_ToJson` | `ToJson`: `Trade` → JSON | 1'592 ns |
-| `BM_ParseAndEncode` | Both together | 3'703 ns |
-| `BM_ReplayStream` | The whole `Stream` on 1'000 trades: `FileSource` → `OnMessage` → `DiscardSink` | 3.71 ms, so 3.71 µs per trade |
+| Benchmark | What it times | Median | Heap allocations |
+|---|---|---|---|
+| `BM_SteadyNanos` | One `SteadyNanos()` clock reading | 15.6 ns | 0 |
+| `BM_RecordSample` | 10'000 `RecordSample` calls into a fresh recorder | 4'029 ns, about 0.4 ns each | 0 |
+| `BM_Parse` | `BinanceAdaptor::Parse`: JSON → `Trade` | 2'077 ns | 25 per trade |
+| `BM_ToJson` | `ToJson`: `Trade` → JSON | 1'570 ns | 19 per trade |
+| `BM_ParseAndEncode` | Both together | 3'719 ns | 44 per trade |
+| `BM_ReplayStream` | The whole `Stream` on 1'000 trades: `FileSource` → `OnMessage` → `DiscardSink` | 3.68 ms, so 3.68 µs per trade | 44 per trade |
 
-- `BM_ReplayStream` costs the same per trade as `BM_ParseAndEncode`: the `Stream` around parsing
-  and encoding adds almost nothing. A run without `--benchmark_report_aggregates_only` also ends
-  its row with `1000 trades per replay, … µs per trade`.
+- `BM_ReplayStream` costs the same per trade as `BM_ParseAndEncode`, in time and in allocations:
+  the `Stream` around parsing and encoding adds almost no time and no allocations.
+- **How allocations are counted.** The benchmark program replaces the global `operator new` with
+  one that adds 1 to a counter and then calls `malloc`, and each benchmark reads the counter before
+  and after its loop. All 44 allocations per trade come from parsing (25) and encoding (19), mostly
+  nlohmann/json building its objects and strings. C libraries such as librdkafka call `malloc`
+  directly, so Kafka's allocations wouldn't be counted. The replay doesn't use Kafka.
+- Each row's label shows its allocations, also in the 5-repetition run, except for
+  `BM_ReplayStream`: its label includes the time, which differs between repetitions, so the summary
+  rows leave it out. A plain `./build/laptime_bench` shows it:
+  `1000 trades per replay, … µs per trade and 44.0 allocations per trade`.
 - The loops run the same messages over and over, warm in cache, and `BM_ReplayStream` sends to
   `DiscardSink`, not Kafka. So they're lower than the live `t0 → t1` row in the shutdown report,
   which also includes the timing headers, `produce()` and cold caches. Use them to compare code
