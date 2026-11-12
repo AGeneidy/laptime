@@ -18,6 +18,7 @@
 #include "adaptors/adaptor_factory.h"
 #include "common/clock.h"
 #include "common/latency_recorder.h"
+#include "encoders/encoder.h"
 #include "encoders/json/trade_json.h"
 #include "feed/stream.h"
 #include "model/trade.h"
@@ -109,7 +110,7 @@ void BM_ToJson(benchmark::State& state) {
       CreateAdaptor(BinanceAdaptorConfig{});
   const Trade trade = adaptor->Parse(kTradeMessage).front();
   const int64_t allocations_before = AllocationCount();
-  std::array<char, 1024> buffer;
+  std::array<char, kEncodeBufferBytes> buffer;
   for (auto _ : state) {
     std::string_view json = ToJson(trade, buffer);
     benchmark::DoNotOptimize(json);
@@ -123,7 +124,7 @@ void BM_ParseAndEncode(benchmark::State& state) {
   const std::unique_ptr<Adaptor> adaptor =
       CreateAdaptor(BinanceAdaptorConfig{});
   const int64_t allocations_before = AllocationCount();
-  std::array<char, 1024> buffer;
+  std::array<char, kEncodeBufferBytes> buffer;
   for (auto _ : state) {
     for (const Trade& trade : adaptor->Parse(kTradeMessage)) {
       std::string_view json = ToJson(trade, buffer);

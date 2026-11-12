@@ -55,7 +55,7 @@ class Stream final {
   void OnMessage(std::string_view, const MessageTimes&);
   bool stopped_ = false;
   std::string name_;
-  std::array<char, 1024> buffer_;
+  std::array<char, kEncodeBufferBytes> buffer_;
   Encoder encoder_;
   LatencyRecorder read_recorder_{};
   LatencyRecorder decode_recorder_{};
