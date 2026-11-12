@@ -121,7 +121,7 @@ repetitions on an Apple silicon Mac with 8 GB:
 | `BM_SteadyNanos` | One `SteadyNanos()` clock reading | 15.6 ns | 0 |
 | `BM_RecordSample` | 10'000 `RecordSample` calls into a fresh recorder | 4'029 ns, about 0.4 ns each | 0 |
 | `BM_Parse` | `BinanceAdaptor::Parse`: JSON → `Trade` | 2'077 ns | 25 per trade |
-| `BM_ToJson` | `ToJson`: `Trade` → JSON | 1'570 ns | 19 per trade |
+| `BM_ToJson` | `ToJson`: `Trade` → JSON, written into a buffer | 1'570 ns | 19 per trade |
 | `BM_ParseAndEncode` | Both together | 3'719 ns | 44 per trade |
 | `BM_ReplayStream` | The whole `Stream` on 1'000 trades: `FileSource` → `OnMessage` → `DiscardSink` | 3.68 ms, so 3.68 µs per trade | 44 per trade |
 

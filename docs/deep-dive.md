@@ -19,7 +19,7 @@ How laptime works inside. For the big picture, start with the [README](../README
 |---|---|---|---|---|
 | **Source** | Bring raw messages in from a feed (network, file, …) | `Source`: `Start()`, `Stop()`, calls `on_message(text, times)` | `WebSocketSource`, `FileSource` | feed → `std::string_view` + `MessageTimes` |
 | **Adaptor** | Understand one exchange's format | `Adaptor`: `Parse(text)` → `std::vector<Trade>` | `BinanceAdaptor` | text → `Trade`s |
-| **Encoder** | Turn a `Trade` into bytes | `Encoder`: a function pointer, `std::string (*)(const Trade&)` | `ToJson` | `Trade` → `std::string` |
+| **Encoder** | Turn a `Trade` into bytes | `Encoder`: a function pointer, `std::string_view (*)(const Trade&, std::span<char>)` | `ToJson` | `Trade` → bytes in the caller's buffer |
 | **Sink** | Deliver bytes somewhere (Kafka, file, …) | `Sink`: `Publish(key, value, times)`, `Flush()` | `KafkaSink`, `DiscardSink` | bytes → destination |
 
 Each stage changes for a different reason. A new exchange needs a new Adaptor. A new wire format
@@ -38,7 +38,12 @@ void Stream::OnMessage(const std::string_view str, const MessageTimes& times) {
   last_read_ns_ = times.read_ns;
   const std::vector<Trade> trades = adaptor_->Parse(str);
   for (const Trade& trade : trades) {
-    sink_->Publish(trade.symbol, encoder_(trade), stamped);
+    const std::string_view json = encoder_(trade, buffer_);
+    if (json.empty()) {
+      std::cerr << "can't encode trade " << trade.trade_id << '\n';
+      continue;
+    }
+    sink_->Publish(trade.symbol, json, stamped);
   }
   // Messages with no trades (other events, bad JSON) would skew the numbers.
   if (trades.empty()) return;
@@ -58,6 +63,22 @@ void Stream::OnMessage(const std::string_view str, const MessageTimes& times) {
   frame. An empty vector means "nothing to publish" (for example, a frame that isn't JSON).
 - The **Encoder is a plain function pointer**, not a class. It has no settings and no state, so
   there is no object to create or own, and calling it is an ordinary function call.
+- **The encoder writes into the Stream's buffer.** `Stream` owns one
+  `std::array<char, kEncodeBufferBytes>` (1'024 bytes) and passes it to the encoder for every
+  trade. The encoder returns a `std::string_view` of the bytes it wrote, or an empty view if they
+  don't fit. Then `OnMessage` prints the trade's ID and skips it, instead of writing past the end.
+  Reusing the buffer is safe because `Publish` copies the bytes before it returns
+  ([§6](#6-threads-who-runs-what)). `ToJson` still builds the JSON with nlohmann first and copies
+  it in, so it still allocates 19 times per trade. The buffer is the interface a zero-allocation
+  encoder will use.
+- **The buffer size is checked at compile time.** `trade_json.cc` adds up the longest JSON a trade
+  can produce: 110 bytes of fixed text, 20 per `int64_t`, 24 per `double`, 4 for `"sell"`, and
+  the limits in `trade.h`, 16 bytes for the exchange and 32 for the symbol. That's 270 bytes, and a
+  `static_assert` fails the build if it's more than `kEncodeBufferBytes`. A 256-byte buffer
+  stops the build with `expression evaluates to '270 <= 256'`. The limits count bytes, not
+  characters: `币安人生USDT` is 8 characters but 16 bytes, the longest of Binance's 3'742 symbols.
+  Nothing enforces the limits yet. A longer symbol is still encoded, as long as the whole JSON
+  fits the buffer.
 - **Each message carries its times.** The source hands over `MessageTimes`: when the socket had
   data (`wake_ns`) and when the read finished (`read_ns`). `OnMessage` adds `start_ns` (`t0`) to a
   copy and passes it with every trade to the sink, which writes the times into Kafka headers
@@ -163,10 +184,11 @@ Factories hand back ownership: `CreateSource`, `CreateAdaptor` and `CreateSink` 
   `this` (the `Stream`), so a `Stream` must never move. On the heap its address stays fixed, even
   when the vector grows.
 - **Declaration order is destruction order.** Members are destroyed bottom-up, so the source,
-  which is declared last, is destroyed first. Its thread is gone before the recorders, adaptor and
-  sink it uses are destroyed:
+  which is declared last, is destroyed first. Its thread is gone before the buffer, recorders,
+  adaptor and sink it uses are destroyed:
 
   ```cpp
+  std::array<char, kEncodeBufferBytes> buffer_;
   Encoder encoder_;
   LatencyRecorder read_recorder_{};
   LatencyRecorder decode_recorder_{};
@@ -200,7 +222,8 @@ Factories hand back ownership: `CreateSource`, `CreateAdaptor` and `CreateSink` 
   thread reads them only after `Stop()` has joined that thread, so the join is all the
   synchronization needed. Reading them while the stream runs would be a data race.
 - **`Publish` is an enqueue, not a network send.** `produce()` copies the bytes (`RK_MSG_COPY`) into
-  librdkafka's queue and returns. The `std::string` from the encoder can be destroyed right away.
+  librdkafka's queue and returns. So the `Stream` can reuse its encode buffer for the next trade
+  right away.
 - **Key = symbol.** With `PARTITION_UA`, librdkafka picks the partition by hashing the key, so all
   trades of one symbol land in one partition, in order.
 - **Delivery reports.** The broker's yes or no for each message comes back through `dr_cb`, which
@@ -248,6 +271,7 @@ first), and `~KafkaSink` prints the delivery stats.
 |---|---|
 | A frame that isn't JSON | Parsed with exceptions off (`Json::parse(text, nullptr, false)`): 0 trades, the frame is skipped |
 | `p` or `q` isn't a number | `ToDouble` returns `std::nullopt`, and the frame is skipped |
+| A trade's JSON doesn't fit the encode buffer | The encoder returns an empty view, and `OnMessage` prints `can't encode trade <id>` and skips that trade. Trades within the byte limits always fit: a `static_assert` checks it |
 | The connection drops | IXWebSocket reconnects on its own, waiting up to 10 s between tries |
 | librdkafka's queue is full | `Publish` waits (`poll(1000)`) and retries. This blocks the socket thread (back-pressure) |
 | Kafka rejects a message | Printed when it happens, counted, and totalled at exit |
