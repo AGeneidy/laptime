@@ -4,6 +4,7 @@
 
 #include "encoders/json/trade_json.h"
 
+#include <algorithm>
 #include <string>
 
 #include "nlohmann/json.hpp"
@@ -19,9 +20,14 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Trade, exchange, symbol, trade_id, price,
                                    quantity, taker_side, trade_time_us,
                                    event_time_us)
 
-std::string ToJson(const Trade &trade) {
+std::string_view ToJson(const Trade& trade, std::span<char> out) {
   // ordered_json keeps the fields in the order listed above.
-  return nlohmann::ordered_json(trade).dump();
+  const std::string str = nlohmann::ordered_json(trade).dump();
+  if (out.size() < str.size()) {
+    return {};
+  }
+  std::ranges::copy(str, out.begin());
+  return {out.data(), str.size()};
 }
 
 }  // namespace laptime

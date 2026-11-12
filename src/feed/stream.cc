@@ -4,6 +4,7 @@
 
 #include "feed/stream.h"
 
+#include <iostream>
 #include <vector>
 
 #include "common/clock.h"
@@ -31,9 +32,7 @@ StreamLatency Stream::SummarizeLatency() const {
   };
 }
 
-Stream::~Stream() {
-  Stop();
-}
+Stream::~Stream() { Stop(); }
 
 void Stream::OnMessage(const std::string_view str, const MessageTimes& times) {
   MessageTimes stamped = times;
@@ -44,7 +43,12 @@ void Stream::OnMessage(const std::string_view str, const MessageTimes& times) {
   last_read_ns_ = times.read_ns;
   const std::vector<Trade> trades = adaptor_->Parse(str);
   for (const Trade& trade : trades) {
-    sink_->Publish(trade.symbol, encoder_(trade), stamped);
+    const std::string_view json = encoder_(trade, buffer_);
+    if (json.empty()) {
+      std::cerr << "can't encode trade " << trade.trade_id << '\n';
+      continue;
+    }
+    sink_->Publish(trade.symbol, json, stamped);
   }
   // Messages with no trades (other events, bad JSON) would skew the numbers.
   if (trades.empty()) return;

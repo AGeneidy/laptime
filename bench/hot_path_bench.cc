@@ -2,6 +2,7 @@
 
 #include <benchmark/benchmark.h>
 
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -108,8 +109,9 @@ void BM_ToJson(benchmark::State& state) {
       CreateAdaptor(BinanceAdaptorConfig{});
   const Trade trade = adaptor->Parse(kTradeMessage).front();
   const int64_t allocations_before = AllocationCount();
+  std::array<char, 1024> buffer;
   for (auto _ : state) {
-    std::string json = ToJson(trade);
+    std::string_view json = ToJson(trade, buffer);
     benchmark::DoNotOptimize(json);
   }
   const int64_t allocations = AllocationCount() - allocations_before;
@@ -121,9 +123,10 @@ void BM_ParseAndEncode(benchmark::State& state) {
   const std::unique_ptr<Adaptor> adaptor =
       CreateAdaptor(BinanceAdaptorConfig{});
   const int64_t allocations_before = AllocationCount();
+  std::array<char, 1024> buffer;
   for (auto _ : state) {
     for (const Trade& trade : adaptor->Parse(kTradeMessage)) {
-      std::string json = ToJson(trade);
+      std::string_view json = ToJson(trade, buffer);
       benchmark::DoNotOptimize(json);
     }
   }
