@@ -14,6 +14,9 @@ namespace laptime {
 
 std::string_view ToJson(const Trade& trade, std::span<char> out);
 
+std::string_view ToJsonWithFormat(const Trade& trade, std::span<char> out);
+
+
 }  // namespace laptime
 
 #endif  // LAPTIME_ENCODERS_JSON_TRADE_JSON_H_

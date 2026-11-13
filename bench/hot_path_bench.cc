@@ -120,6 +120,21 @@ void BM_ToJson(benchmark::State& state) {
 }
 BENCHMARK(BM_ToJson);
 
+void BM_ToJsonWithFormat(benchmark::State& state) {
+  const std::unique_ptr<Adaptor> adaptor =
+      CreateAdaptor(BinanceAdaptorConfig{});
+  const Trade trade = adaptor->Parse(kTradeMessage).front();
+  const int64_t allocations_before = AllocationCount();
+  std::array<char, kEncodeBufferBytes> buffer;
+  for (auto _ : state) {
+    std::string_view json = ToJsonWithFormat(trade, buffer);
+    benchmark::DoNotOptimize(json);
+  }
+  const int64_t allocations = AllocationCount() - allocations_before;
+  state.SetLabel(AllocationsPer(allocations, state.iterations(), "trade"));
+}
+BENCHMARK(BM_ToJsonWithFormat);
+
 void BM_ParseAndEncode(benchmark::State& state) {
   const std::unique_ptr<Adaptor> adaptor =
       CreateAdaptor(BinanceAdaptorConfig{});

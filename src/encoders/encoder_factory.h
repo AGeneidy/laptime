@@ -9,7 +9,10 @@
 #include "model/config/encoder_config.h"
 
 namespace laptime {
+
+
 inline Encoder EncoderOf(const JsonEncoderConfig&) { return ToJson; }
+inline Encoder EncoderOf(const FormatJsonEncoderConfig&) { return ToJson; }
 
 inline Encoder CreateEncoder(const EncoderConfig& config) {
   return std::visit([](const auto& c) { return EncoderOf(c); }, config);

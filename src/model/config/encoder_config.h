@@ -9,9 +9,11 @@
 
 namespace laptime {
 
+struct FormatJsonEncoderConfig {};
+
 struct JsonEncoderConfig {};
 
-using EncoderConfig = std::variant<JsonEncoderConfig>;
+using EncoderConfig = std::variant<JsonEncoderConfig, FormatJsonEncoderConfig>;
 
 }  // namespace laptime
 

@@ -59,4 +59,20 @@ std::string_view ToJson(const Trade& trade, std::span<char> out) {
   return {out.data(), str.size()};
 }
 
+std::string_view ToJsonWithFormat(const Trade& trade, std::span<char> out) {
+    const auto [_, size] = std::format_to_n(
+        out.data(), out.size(),
+        R"({{"exchange":"{}","symbol":"{}","trade_id":{},"price":{},)"
+        R"("quantity":{},"taker_side":"{}","trade_time_us":{},)"
+        R"("event_time_us":{}}})",
+        trade.exchange, trade.symbol, trade.trade_id, trade.price,
+        trade.quantity,
+        trade.taker_side == Side::kBuy ? "buy" : "sell", trade.trade_time_us,
+        trade.event_time_us);
+
+    // result.size is the whole JSON's length, even when only part of it fit.
+    if (static_cast<size_t>(size) > out.size()) return {};
+    return {out.data(), static_cast<size_t>(size)};
+}
+
 }  // namespace laptime
